@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ECS·CTRL // CONSOLE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#04050a; --green:#00ff9c; --blue:#00d9ff; --red:#ff3b5c;
+  --yellow:#ffd23b; --gray:#6b7690; --text:#b8ffd9;
+  --font-mono:'Share Tech Mono','Courier New',ui-monospace,monospace;
+  --font-head:'Orbitron','Share Tech Mono',monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-mono);overflow:hidden;}
+
+/* 背景网格 + 扫描线 + 横向扫光 */
+.grid-bg{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    linear-gradient(rgba(0,255,156,.04) 1px,transparent 1px) 0 0/34px 34px,
+    linear-gradient(90deg,rgba(0,255,156,.04) 1px,transparent 1px) 0 0/34px 34px,
+    radial-gradient(circle at 50% 38%,rgba(0,60,40,.4),transparent 62%);}
+.scanlines{position:fixed;inset:0;z-index:50;pointer-events:none;opacity:.5;
+  background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(0,0,0,.18) 2px 4px);}
+.scanbar{position:fixed;left:0;right:0;height:90px;z-index:50;pointer-events:none;
+  background:linear-gradient(180deg,transparent,rgba(0,255,156,.06),transparent);
+  animation:scanmove 7s linear infinite;}
+@keyframes scanmove{0%{top:-90px}100%{top:100%}}
+
+#app{position:relative;z-index:1;height:100%;display:flex;flex-direction:column;}
+.hidden{display:none !important;}
+
+/* 面板 + 角标 */
+.panel{position:relative;background:linear-gradient(180deg,rgba(10,13,22,.92),rgba(6,8,14,.92));
+  border:1px solid rgba(0,255,156,.18);box-shadow:inset 0 0 24px rgba(0,255,156,.05);padding:14px;}
+.panel::before,.panel::after{content:'';position:absolute;width:10px;height:10px;}
+.panel::before{top:-1px;left:-1px;border-top:2px solid var(--green);border-left:2px solid var(--green);}
+.panel::after{bottom:-1px;right:-1px;border-bottom:2px solid var(--green);border-right:2px solid var(--green);}
+
+/* ===== 登录屏 ===== */
+#login-screen{flex:1;display:flex;align-items:center;justify-content:center;padding:20px;}
+.login-card{width:min(420px,92vw);}
+.brand{font-family:var(--font-head);letter-spacing:3px;font-size:14px;color:var(--green);
+  text-shadow:0 0 8px rgba(0,255,156,.5);}
+.brand b{color:var(--blue);text-shadow:0 0 8px rgba(0,217,255,.5);}
+.subtitle{color:var(--gray);font-size:11px;margin:4px 0 18px;letter-spacing:1px;}
+.radar{width:120px;height:120px;margin:18px auto;border-radius:50%;position:relative;overflow:hidden;
+  border:1px solid rgba(0,255,156,.25);background:radial-gradient(circle,rgba(0,40,30,.5),transparent 70%);}
+.radar::before{content:'';position:absolute;inset:32%;border-radius:50%;border:1px solid rgba(0,255,156,.22);}
+.radar .sweep{position:absolute;inset:0;border-radius:50%;
+  background:conic-gradient(from 0deg,rgba(0,255,156,.55),rgba(0,255,156,.1) 60deg,transparent 90deg);
+  animation:spin 1.8s linear infinite;}
+.radar .blip{position:absolute;width:5px;height:5px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 8px var(--green);animation:blip 1.8s ease-in-out infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes blip{0%,100%{opacity:.15}50%{opacity:1}}
+
+.field-label{display:block;font-size:11px;color:var(--blue);letter-spacing:2px;margin:14px 0 6px;}
+input[type=password]{width:100%;background:#04060b;border:1px solid rgba(0,255,156,.25);color:var(--text);
+  font-family:var(--font-mono);font-size:16px;letter-spacing:3px;padding:12px;outline:none;caret-color:var(--green);}
+input:focus{border-color:var(--green);box-shadow:0 0 12px rgba(0,255,156,.25);}
+.btn-connect{margin-top:16px;width:100%;padding:13px;cursor:pointer;
+  background:linear-gradient(90deg,rgba(0,255,156,.12),rgba(0,217,255,.12));
+  border:1px solid var(--green);color:var(--green);font-family:var(--font-head);letter-spacing:4px;font-size:14px;transition:.15s;}
+.btn-connect:hover{background:rgba(0,255,156,.22);box-shadow:0 0 18px rgba(0,255,156,.4);}
+.btn-connect:active{transform:translateY(1px);}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+.shake{animation:shake .4s;}
+.login-status{margin-top:12px;font-size:12px;color:var(--gray);min-height:16px;letter-spacing:1px;}
+.login-status.ok{color:var(--green);}
+.login-status.err{color:var(--red);}
+
+/* ===== 主控台 ===== */
+#console-screen{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(0,255,156,.15);}
+.topbar .region{font-size:11px;color:var(--blue);border:1px solid rgba(0,217,255,.3);padding:3px 8px;letter-spacing:1px;}
+main{flex:1;overflow:auto;padding:14px;display:flex;flex-direction:column;gap:14px;}
+
+.status-row{display:flex;gap:14px;flex-wrap:wrap;}
+.status-card,.dns-card{flex:1;min-width:220px;}
+.label{font-size:11px;color:var(--gray);letter-spacing:2px;}
+.big-status{font-family:var(--font-head);font-size:34px;letter-spacing:3px;margin:6px 0;line-height:1;}
+.big-status .dot{display:inline-block;width:14px;height:14px;border-radius:50%;margin-right:10px;vertical-align:middle;}
+.dot{box-shadow:0 0 10px currentColor;}
+.dot.green{color:var(--green);background:var(--green);animation:pulse 1.6s infinite;}
+.dot.red{color:var(--red);background:var(--red);}
+.dot.yellow{color:var(--yellow);background:var(--yellow);animation:pulse .9s infinite;}
+.dot.gray{color:var(--gray);background:var(--gray);}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.ip-line{font-size:20px;margin-top:6px;}
+.ip-line .ip{color:var(--blue);text-shadow:0 0 8px rgba(0,217,255,.5);}
+.meta{font-size:11px;color:var(--gray);margin-top:8px;line-height:1.6;}
+.dns-target{color:var(--blue);font-size:14px;margin-top:6px;word-break:break-all;}
+.dns-state{font-size:12px;margin-top:6px;color:var(--green);}
+
+.btn-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+@media (max-width:560px){.btn-grid{grid-template-columns:repeat(2,1fr);}}
+.btn{padding:18px 8px;cursor:pointer;font-family:var(--font-head);letter-spacing:2px;font-size:14px;
+  border:1px solid;background:#05070d;color:var(--text);position:relative;overflow:hidden;transition:.15s;}
+.btn .sub{display:block;font-family:var(--font-mono);font-size:9px;letter-spacing:1px;margin-top:5px;opacity:.7;}
+.btn::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:currentColor;opacity:.8;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn.start{color:var(--green);border-color:rgba(0,255,156,.4);}
+.btn.start:hover:not(:disabled){background:rgba(0,255,156,.14);box-shadow:0 0 18px rgba(0,255,156,.3);}
+.btn.stop{color:var(--red);border-color:rgba(255,59,92,.4);}
+.btn.stop:hover:not(:disabled){background:rgba(255,59,92,.14);box-shadow:0 0 18px rgba(255,59,92,.3);}
+.btn.restart{color:var(--yellow);border-color:rgba(255,210,59,.4);}
+.btn.restart:hover:not(:disabled){background:rgba(255,210,59,.14);box-shadow:0 0 18px rgba(255,210,59,.3);}
+.btn.refresh{color:var(--gray);border-color:rgba(107,118,144,.4);}
+.btn.refresh:hover:not(:disabled){background:rgba(107,118,144,.14);box-shadow:0 0 14px rgba(107,118,144,.3);}
+
+.terminal{flex:1;min-height:160px;display:flex;flex-direction:column;background:#02030a;border:1px solid rgba(0,255,156,.15);}
+.term-bar{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;border-bottom:1px solid rgba(0,255,156,.15);font-size:11px;color:var(--gray);}
+.term-bar .dots{display:inline-flex;gap:5px;vertical-align:middle;margin-right:8px;}
+.term-bar .dots i{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.term-log{flex:1;overflow:auto;padding:10px;font-size:12.5px;line-height:1.7;}
+.log-line{white-space:pre-wrap;word-break:break-word;}
+.log-line .ts{color:var(--gray);}
+.log-line .tag{color:var(--blue);margin-right:6px;font-size:10px;}
+.log-line.ok{color:var(--green);}
+.log-line.err{color:var(--red);}
+.log-line.warn{color:var(--yellow);}
+.log-line.info{color:var(--text);}
+footer{padding:6px 14px;font-size:10px;color:var(--gray);border-top:1px solid rgba(0,255,156,.1);display:flex;justify-content:space-between;letter-spacing:1px;}
+
+/* ===== v2.0 扩展面板 ===== */
+.dash-row{display:flex;gap:14px;flex-wrap:wrap;}
+.cost-card,.monitor-card,.mc-card,.tools-card{flex:1;min-width:240px;}
+.kpi{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
+.kpi .item{flex:1;min-width:80px;}
+.kpi .v{font-size:22px;font-family:var(--font-head);letter-spacing:1px;}
+.kpi .l{font-size:10px;color:var(--gray);letter-spacing:1px;margin-top:2px;}
+.low{color:var(--red)!important;animation:blink .9s step-start infinite;text-shadow:0 0 10px var(--red);}
+@keyframes blink{50%{opacity:.25}}
+.bar{margin:5px 0;}
+.bar .bl{display:flex;justify-content:space-between;font-size:10px;color:var(--gray);}
+.bar .track{height:8px;background:#0a0d16;border:1px solid rgba(0,255,156,.2);margin-top:3px;overflow:hidden;}
+.bar .fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));width:0;transition:width .4s;}
+.spark{width:100%;height:36px;margin-top:6px;background:#04060b;border:1px solid rgba(0,255,156,.15);}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;}
+.chips .chip{font-size:11px;border:1px solid rgba(0,217,255,.4);color:var(--blue);padding:2px 7px;}
+.tools-card .label{margin-bottom:6px;}
+.tool-row{margin-bottom:10px;}
+.tool-row label{display:block;font-size:10px;color:var(--gray);letter-spacing:1px;margin-bottom:4px;}
+.tool-row input[type=text],.tool-row input{width:100%;background:#04060b;border:1px solid rgba(0,255,156,.2);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:8px;outline:none;}
+.tool-row input:focus{border-color:var(--green);box-shadow:0 0 10px rgba(0,255,156,.2);}
+.mini-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;}
+.mini-btn{flex:1;min-width:64px;padding:8px 6px;cursor:pointer;background:#05070d;border:1px solid rgba(0,255,156,.35);color:var(--green);font-family:var(--font-head);font-size:11px;letter-spacing:1px;text-align:center;transition:.15s;}
+.mini-btn:hover{background:rgba(0,255,156,.12);}
+.mini-btn.red{color:var(--red);border-color:rgba(255,59,92,.4);}
+.mini-btn.red:hover{background:rgba(255,59,92,.12);}
+.mini-btn.yellow{color:var(--yellow);border-color:rgba(255,210,59,.4);}
+.mini-btn.yellow:hover{background:rgba(255,210,59,.12);}
+.mini-btn.blue{color:var(--blue);border-color:rgba(0,217,255,.4);}
+.mini-btn.blue:hover{background:rgba(0,217,255,.12);}
+.mini-btn.gray{color:var(--gray);border-color:rgba(107,118,144,.4);}
+.mini-btn.gray:hover{background:rgba(107,118,144,.14);}
+.mini-btn.block{width:100%;margin-top:8px;}
+.outbox{white-space:pre-wrap;word-break:break-word;background:#02030a;border:1px solid rgba(0,255,156,.15);padding:8px;font-size:11px;max-height:150px;overflow:auto;color:var(--text);margin-top:6px;}
+.outbox:empty{display:none;}
+.note{font-size:10px;color:var(--gray);margin-top:6px;line-height:1.5;}
+.note.err{color:var(--red);}
+</style>
+</head>
+<body>
+<div class="grid-bg"></div>
+<div class="scanbar"></div>
+<div class="scanlines"></div>
+
+<div id="app">
+
+  <!-- ===== 登录屏 ===== -->
+  <div id="login-screen">
+    <div class="panel login-card" id="login-card">
+      <div class="brand">ECS·<b>CTRL</b></div>
+      <div class="subtitle">// SINGLE-INSTANCE CONTROL CONSOLE</div>
+      <div class="radar">
+        <div class="sweep"></div>
+        <div class="blip" style="left:32%;top:40%;"></div>
+        <div class="blip" style="left:60%;top:62%;animation-delay:.6s;"></div>
+      </div>
+      <label class="field-label">ACCESS KEY // 访问密码</label>
+      <input type="password" id="login-pass" placeholder="••••••••" autocomplete="off">
+      <button class="btn-connect" id="btn-connect">CONNECT // 管理员</button>
+      <button class="mini-btn blue block" id="btn-readonly" style="margin-top:8px;min-width:0;">只读进入（无需密码，仅看状态）</button>
+      <div class="login-status" id="login-status">ESTABLISHING SECURE CHANNEL…</div>
+    </div>
+  </div>
+
+  <!-- ===== 主控台 ===== -->
+  <div id="console-screen" class="hidden">
+    <div class="topbar">
+      <div class="brand">ECS·<b>CTRL</b> // <span id="tier-tag" style="color:var(--yellow);letter-spacing:1px;">READ-ONLY</span></div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <div class="region" id="region-tag">REGION: --</div>
+        <button class="mini-btn blue" id="btn-upgrade" style="display:none;min-width:auto;">管理员解锁</button>
+      </div>
+    </div>
+    <main>
+      <div class="status-row">
+        <div class="panel status-card">
+          <div class="label">INSTANCE STATUS</div>
+          <div class="big-status"><span class="dot gray" id="status-dot"></span><span id="inst-status">UNKNOWN</span></div>
+          <div class="ip-line">PUBLIC IP <span class="ip" id="inst-ip">—</span></div>
+          <div class="meta" id="inst-meta">—</div>
+          <div class="meta" id="mcs-meta">MCS manager <b>23333</b>: 未探测</div>
+        </div>
+        <div class="panel dns-card">
+          <div class="label">CLOUDFLARE DNS // A RECORD</div>
+          <div class="dns-target" id="dns-target">—</div>
+          <div class="dns-state" id="dns-state">等待状态同步…</div>
+        </div>
+      </div>
+
+      <div class="btn-grid">
+        <button class="btn start" id="btn-start">START<span class="sub">开机</span></button>
+        <button class="btn stop" id="btn-stop">STOP<span class="sub">节省停机</span></button>
+        <button class="btn restart" id="btn-restart">RESTART<span class="sub">重启</span></button>
+        <button class="btn refresh" id="btn-refresh">REFRESH<span class="sub">刷新</span></button>
+      </div>
+
+      <div class="dash-row">
+        <div class="panel cost-card">
+          <div class="label">COST // 费用看板</div>
+          <div class="kpi">
+            <div class="item"><div class="v" id="kpi-balance">—</div><div class="l">账户余额（<span id="kpi-cur">CNY</span>）</div></div>
+          </div>
+          <div class="note" id="cost-note">加载中…</div>
+        </div>
+        <div class="panel monitor-card">
+          <div class="label">MONITOR // 实时监控</div>
+          <div class="bar"><div class="bl"><span>CPU</span><span id="v-cpu">—</span></div><div class="track"><div class="fill" id="b-cpu"></div></div></div>
+          <div class="bar"><div class="bl"><span>内存</span><span id="v-mem">—</span></div><div class="track"><div class="fill" id="b-mem"></div></div></div>
+          <div class="bar"><div class="bl"><span>出带宽</span><span id="v-neto">—</span></div><div class="track"><div class="fill" id="b-neto"></div></div></div>
+          <div class="bar"><div class="bl"><span>入带宽</span><span id="v-neti">—</span></div><div class="track"><div class="fill" id="b-neti"></div></div></div>
+          <div class="bar"><div class="bl"><span>CPU 近 1h</span><span id="v-cpu-h">—</span></div><canvas class="spark" id="spark-cpu" width="240" height="36"></canvas></div>
+        </div>
+      </div>
+
+      <div class="dash-row">
+        <div class="panel mc-card">
+          <div class="label">MINECRAFT // 在线玩家</div>
+          <div class="kpi">
+            <div class="item"><div class="v" id="mc-online">—</div><div class="l">在线 / 上限</div></div>
+            <div class="item"><div class="v" id="mc-ver" style="font-size:13px;">—</div><div class="l">版本 / MOTD</div></div>
+          </div>
+          <div class="chips" id="mc-players"></div>
+          <button class="mini-btn blue block" id="btn-mc">探测 MC 服</button>
+        </div>
+        <div class="panel tools-card">
+          <div class="label">TOOLS // 运维工具</div>
+          <div class="mini-btns">
+            <button class="mini-btn gray" id="btn-probe">探活</button>
+            <button class="mini-btn yellow" id="btn-audit">SSH 审计</button>
+            <button class="mini-btn" id="btn-notify">推送测试</button>
+          </div>
+          <div class="tool-row">
+            <label>执行命令（管理员）</label>
+            <div class="mini-btns" style="margin-bottom:6px;">
+              <button class="mini-btn blue" id="cmd-mode-os">OS(root)</button>
+              <button class="mini-btn" id="cmd-mode-mc">MC 指令</button>
+            </div>
+            <input type="text" id="cmd-input" placeholder="OS：uptime / docker ps …；MC：/whitelist /say /kick …">
+            <div class="mini-btns"><button class="mini-btn red" id="btn-exec">执行</button></div>
+            <div class="outbox" id="cmd-out"></div>
+            <div class="note" id="cmd-note">OS 走云助手白名单；MC 指令走 RCON（输入 / 有提示）</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-row">
+        <div class="panel schedule-card">
+          <div class="label">SCHEDULE // 定时开关机（保存至 Cloudflare KV）</div>
+          <div class="kpi" style="align-items:flex-end;">
+            <div class="item"><div class="l">开机</div><input type="time" id="sched-start" value="08:00" style="font-family:var(--font-mono);background:#04060b;border:1px solid rgba(0,255,156,.2);color:var(--text);padding:6px;"></div>
+            <div class="item"><div class="l">关机</div><input type="time" id="sched-stop" value="22:00" style="font-family:var(--font-mono);background:#04060b;border:1px solid rgba(0,255,156,.2);color:var(--text);padding:6px;"></div>
+            <div class="item"><div class="l">星期(1-7,空=全)</div><input type="text" id="sched-days" placeholder="1,2,3,4,5" style="background:#04060b;border:1px solid rgba(0,255,156,.2);color:var(--text);padding:8px;font-family:var(--font-mono);font-size:12px;"></div>
+            <div class="item"><div class="l">时区</div><input type="text" id="sched-tz" value="Asia/Shanghai" style="background:#04060b;border:1px solid rgba(0,255,156,.2);color:var(--text);padding:8px;font-family:var(--font-mono);font-size:12px;"></div>
+          </div>
+          <div class="mini-btns">
+            <label style="color:var(--gray);font-size:11px;letter-spacing:1px;"><input type="checkbox" id="sched-enabled" checked> 启用定时</label>
+            <button class="mini-btn" id="btn-sched-save">保存</button>
+          </div>
+          <div class="note" id="sched-note">定时开/关机：把 ?action=scheduler&secret=… 用外部定时器每分钟打一次即可（桌面版无常驻）</div>
+        </div>
+      </div>
+
+      <div class="dash-row">
+        <div class="panel" style="flex:1;">
+          <div class="label">连接模式 // 办法一·二</div>
+          <div class="mini-btns" style="margin-bottom:6px;">
+            <button class="mini-btn blue" id="btn-mode-direct">直连（本机）</button>
+            <button class="mini-btn" id="btn-mode-function">走函数（中继）</button>
+          </div>
+          <div class="mini-btns" style="margin-bottom:6px;">
+            <button class="mini-btn green" id="btn-relay-on">启用中继</button>
+            <button class="mini-btn red" id="btn-relay-off">停用中继</button>
+            <span class="meta" id="relay-state">中继状态：—</span>
+          </div>
+          <div class="note">直连：软件直接连 阿里云/Cloudflare/飞书/RCON。走函数：CF、飞书 等交给阿里云 FC（填 config.json 的 RELAY_URL + RELAY_SECRET，MODE=function），学校外网不稳也能推。启用/停用 = 云端开关。</div>
+        </div>
+      </div>
+    </main>
+
+    <div class="terminal" style="margin:0 14px 14px;">
+      <div class="term-bar">
+        <span><span class="dots"><i style="background:var(--red)"></i><i style="background:var(--yellow)"></i><i style="background:var(--green)"></i></span>TERMINAL // 操作日志</span>
+        <span id="poll-state">POLL: OFF</span>
+      </div>
+      <div class="term-log" id="terminal"></div>
+    </div>
+
+    <footer>
+      <span>ECS·CTRL v2.1 // <span id="footer-tier">—</span></span>
+      <span id="footer-ip">IP: —</span>
+    </footer>
+  </div>
+
+</div>
+<datalist id="mc-cmds"></datalist>
+
+<script>
+(function(){
+'use strict';
+var ADMIN=false, PASS='', POLL_TIMER=null, POLL_MS=5000, POLL_LEFT=0, cmdMode='os';
+var TRANSITIONAL=['Pending','Starting','Stopping','Rebooting','Migrating'];
+/* MC 指令 autocomplete（vanilla + 常见插件/模组；可直接在此扩充） */
+var MC_COMMANDS=[
+"/whitelist","/whitelist add","/whitelist remove","/whitelist reload","/op","/deop","/ban","/unban","/ban-ip","/unban-ip","/kick","/say","/msg","/tell","/me","/list","/time","/time set","/time add","/gamemode","/gamemode survival","/gamemode creative","/gamemode adventure","/gamemode spectator","/difficulty","/difficulty peaceful","/difficulty easy","/difficulty hard","/give","/clear","/kill","/suicide","/tp","/teleport","/spawn","/back","/home","/sethome","/setworldspawn","/worldspawn","/weather","/weather clear","/weather rain","/effect","/enchant","/execute","/summon","/data","/fill","/replace","/setblock","/spreadplayers","/particle","/playsound","/stopsound","/trigger","/scoreboard","/scoreboard add","/scoreboard enable","/reload","/save-all","/stop","/help","/recentpack","/k","/w","/t","/tellraw","/advancements","/loot","/ride","/return","/tag","/team","/team add","/team remove","/worldborder","/worldborder set","/debug","/downgrade","/gamerule","/gamerule mobGriefing false","/gamerule keepInventory true","/forceload","/forceload add","/forceload remove","/seed","/commandblock","/place","/item","/xp","/setidletimeout","/function","/recipe","/recipe give",
+"/en","/enderchest","/kit","/kit <kit>","/bal","/baltop","/pay","/eco","/workbench","/hat","/heal","/feed","/god","/afk","/r","/pt","/near","/who","/find <player>","/tpa","/tpaccept","/tpdeny","/warp","/warp <name>","/warps","/j <name>","/tp <player>","/setmaxplayers",
+"/pos1","/pos2","/undo","/redo","/copy","/cut","/paste","/replace","/set","/calc","/brush","/wand","/sphere","/cube","/pyramid","/cyl","/deco","/f","/h","/d","/l","/m","/o","/summon","/rest","/un",
+"/claim","/confirm","/auto","/topclaim","/trust",
+"/clearlag","/clearlag remove","/mv","/mv create","/mv list","/mv here","/mv wp","/co","/co search","/co block","/co undo","/perms","/dynmap","/ftb","/ftb queue","/ftb home","/rcon","/help"
+];
+
+function $(id){return document.getElementById(id);}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+
+/* ===== 终端日志 ===== */
+function log(msg,type){
+  type=type||'info';
+  var box=$('terminal');
+  var line=document.createElement('div');
+  line.className='log-line '+type;
+  var t=new Date();
+  var ts=('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)+':'+('0'+t.getSeconds()).slice(-2);
+  var span=document.createElement('span');span.className='ts';span.textContent='['+ts+'] ';
+  var tag=document.createElement('span');tag.className='tag';tag.textContent=type.toUpperCase()+' ';
+  var txt=document.createTextNode(escapeHtml(msg));
+  line.appendChild(span);line.appendChild(tag);line.appendChild(txt);
+  box.appendChild(line);
+  while(box.children.length>300){box.removeChild(box.firstChild);}
+  box.scrollTop=box.scrollHeight;
+}
+
+function setBusy(b){['btn-start','btn-stop','btn-restart','btn-refresh'].forEach(function(id){$(id).disabled=b;});}
+
+/* ===== 请求封装：一律 GET + Query String；防 HTML 拦截；统一 JSON ===== */
+function api(action,extra){
+  extra=extra||{};
+  var params=new URLSearchParams();
+  params.set('action',action);
+  var pw=(extra.password!==undefined)?extra.password:PASS;
+  if(pw) params.set('password',pw);
+  for(var k in extra){ if(extra[k]!==undefined&&extra[k]!==null&&k!=='password') params.set(k,extra[k]); }
+  var url='/?'+params.toString();
+  return fetch(url,{method:'GET',headers:{'Accept':'application/json'}})
+    .then(function(res){
+      return res.text().then(function(text){
+        var t=text.replace(/^\uFEFF/,'').trim();
+        if(t.charAt(0)==='<'){
+          var e=new Error('网关拦截：收到 HTML 而非 JSON（请检查 Cloudflare / FC 网关配置）');
+          e.html=true;throw e;
+        }
+        var data;
+        try{data=JSON.parse(text);}
+        catch(_){var e2=new Error('响应非 JSON：'+text.slice(0,60));e2.badjson=true;throw e2;}
+        data.__status=res.status;
+        return data;
+      });
+    })
+    .catch(function(e){
+      if(e&&(e.html||e.badjson)) return Promise.reject(e);
+      var ne=new Error('网络错误：'+((e&&e.message)?e.message:e));ne.net=true;
+      return Promise.reject(ne);
+    });
+}
+
+/* ===== 登录 ===== */
+function setStatus(msg,cls){var s=$('login-status');s.textContent=msg;s.className='login-status '+(cls||'');}
+function shake(elm){elm.classList.remove('shake');void elm.offsetWidth;elm.classList.add('shake');}
+
+function doConnect(silent){
+  var guess=$('login-pass').value.trim();
+  if(!guess){setStatus('请输入管理员密码','err');return;}
+  setStatus(silent?'CONNECTING…':'ESTABLISHING SECURE CHANNEL…');
+  api('check',{password:guess}).then(function(d){
+    if(d&&d.ok===true){
+      ADMIN=true; PASS=guess;
+      try{sessionStorage.setItem('ecspw',guess);}catch(e){}
+      log('AUTH OK // 管理员通道已建立','ok');
+      enterConsole(true);
+    }else{
+      setStatus('ACCESS DENIED // 密码错误','err');
+      shake($('login-card'));
+      if(!silent) log('认证失败：密码错误','err');
+    }
+  }).catch(function(e){
+    setStatus('CONNECTION FAILED // '+e.message,'err');
+  });
+}
+function enterReadonly(){ ADMIN=false; PASS=''; log('进入只读模式（仅查看状态）','info'); enterConsole(false); }
+function upgradeToAdmin(){ $('console-screen').classList.add('hidden'); $('login-screen').classList.remove('hidden'); setStatus('输入管理员密码以解锁操作'); $('login-pass').focus(); }
+
+/* ===== 主控台 ===== */
+function enterConsole(isAdmin){
+  $('login-screen').classList.add('hidden');
+  $('console-screen').classList.remove('hidden');
+  log('=== 主控台已连接（'+(isAdmin?'管理员':'只读')+'）===','ok');
+  applyAdminMode();
+  fetchAll();
+  loadSchedule();
+  relayLoadStatus();
+}
+function applyAdminMode(){
+  var t=$('tier-tag'); t.textContent=ADMIN?'ADMIN':'READ-ONLY'; t.style.color=ADMIN?'var(--green)':'var(--yellow)';
+  var ft=$('footer-tier'); if(ft)ft.textContent=ADMIN?'ADMIN':'READ-ONLY';
+  $('btn-upgrade').style.display=ADMIN?'none':'inline-block';
+  ['btn-start','btn-stop','btn-restart','btn-exec','btn-probe','btn-audit','btn-notify','btn-sched-save','btn-relay-on','btn-relay-off','cmd-mode-os','cmd-mode-mc','cmd-input','sched-start','sched-stop','sched-days','sched-tz','sched-enabled'].forEach(function(id){var e=$(id);if(e)e.disabled=!ADMIN;});
+  setCmdMode(cmdMode);
+}
+
+function render(d){
+  var s=d.status||'UNKNOWN';
+  $('inst-status').textContent=s;
+  var dot=$('status-dot');
+  dot.className='dot '+(s==='Running'?'green':(s==='Stopped'?'red':'yellow'));
+  var ip=d.publicIp||'';
+  $('inst-ip').textContent=ip||'—';
+  $('footer-ip').textContent='IP: '+(ip||'—');
+  $('inst-meta').textContent=(d.instanceId?('ID '+d.instanceId):'')+(d.name?(' · '+d.name):'');
+  $('region-tag').textContent='REGION: '+(d.region||'—');
+  if(d.dnsName) $('dns-target').textContent=d.dnsName;
+  var dns=d.dns||{};
+  if(dns.msg){
+    $('dns-state').textContent=dns.msg;
+    $('dns-state').style.color=(dns.ok&&dns.skipped===true)?'var(--green)':(dns.ok?'var(--green)':'var(--yellow)');
+    if(!dns.skipped||dns.action==='unchanged'){/* only log real events */}
+    if(dns.action==='unchanged') log('DNS 已是最新（'+d.publicIp+'）','ok');
+    else if(dns.action==='updated') log('DNS 已更新 → '+d.publicIp,'ok');
+    else if(dns.action==='created') log('DNS 已创建 → '+d.publicIp,'ok');
+    else if(dns.ok===false&&!dns.skipped) log('DNS 同步失败：'+dns.msg,'warn');
+    else if(dns.skipped&&dns.msg&&dns.msg.indexOf('未配置')>-1) log(dns.msg,'warn');
+  }
+  $('poll-state').textContent='POLL: '+(POLL_TIMER?'ON':'OFF');
+}
+
+/* 手动刷新：一次性拉 status/monitor/cost/mc（不常驻轮询，白嫖） */
+function fetchAll(){
+  api('status').then(function(d){ if(d&&d.ok)render(d); else log('状态：'+((d&&d.msg)||'未知'),'err'); }).catch(function(e){log('状态失败：'+e.message,'err');});
+  api('monitor').then(renderMonitor).catch(function(){});
+  api('cost').then(renderCost).catch(function(){});
+  api('mc').then(renderMc).catch(function(){});
+}
+
+/* 有界轮询：开/关机后最多 ~3 分钟抓新 IP 同步 DNS，到点即停 */
+function boundedPoll(){ stopPoll(); POLL_LEFT=36; pollOnce(); }
+function pollOnce(){
+  if(POLL_LEFT<=0){ stopPoll(); return; }
+  POLL_LEFT--; var ps=$('poll-state'); if(ps)ps.textContent='POLL: ON ('+POLL_LEFT+')';
+  api('status').then(function(d){
+    if(d&&d.ok){ render(d);
+      if(TRANSITIONAL.indexOf(d.status)>-1){ POLL_TIMER=setTimeout(pollOnce,POLL_MS); }
+      else{ stopPoll(); if(d.status==='Running'&&d.publicIp)log('实例 Running，IP='+d.publicIp,'ok'); if(d.status==='Stopped')log('实例已停止','info'); }
+    } else { stopPoll(); log('轮询停止：'+((d&&d.msg)||''),'warn'); }
+  }).catch(function(){ stopPoll(); });
+}
+function stopPoll(){ if(POLL_TIMER){clearTimeout(POLL_TIMER);POLL_TIMER=null;} var ps=$('poll-state'); if(ps)ps.textContent='POLL: OFF'; }
+
+/* ===== 操作按钮 ===== */
+function doStart(){ if(!ADMIN)return; log('发送开机指令…','info'); setBusy(true); api('start').then(function(d){setBusy(false); if(d&&d.ok===true){log(d.msg||'START ok','ok');boundedPoll();} else log('开机失败：'+((d&&d.msg)||'未知'),'err');}).catch(function(e){setBusy(false);log('开机失败：'+e.message,'err');}); }
+function doStop(){ if(!ADMIN)return; if(!confirm('确认关机？（节省停机，关机不收费）'))return; log('发送关机指令（节省停机）…','info'); setBusy(true); api('stop').then(function(d){setBusy(false); if(d&&d.ok===true){log(d.msg||'STOP ok','ok');boundedPoll();} else log('关机失败：'+((d&&d.msg)||'未知'),'err');}).catch(function(e){setBusy(false);log('关机失败：'+e.message,'err');}); }
+function doRestart(){ if(!ADMIN)return; if(!confirm('确认重启实例？'))return; log('发送重启指令…','info'); setBusy(true); api('restart').then(function(d){setBusy(false); if(d&&d.ok===true){log(d.msg||'RESTART ok','ok');boundedPoll();} else log('重启失败：'+((d&&d.msg)||'未知'),'err');}).catch(function(e){setBusy(false);log('重启失败：'+e.message,'err');}); }
+function doRefresh(){ fetchAll(); }
+
+/* ===== v2.0 渲染 + 工具（手动触发，不常驻） ===== */
+function fmtBps(b){ if(b==null)return null; b=Number(b); if(isNaN(b))return null; if(b<1000)return b.toFixed(0)+' B/s'; if(b<1048576)return (b/1024).toFixed(1)+' KB/s'; return (b/1048576).toFixed(2)+' MB/s'; }
+function setBar(fillId,valId,pct,text){ var f=$(fillId);if(!f)return;f.style.width=Math.max(0,Math.min(100,pct||0))+'%';var v=$(valId);if(v)v.textContent=(text!=null&&text!=='')?text:'—'; }
+function out(id,txt){ var e=$(id);if(e)e.textContent=(txt==null?'':String(txt)); }
+function drawSpark(id,data){ var c=$(id);if(!c||!c.getContext)return;var ctx=c.getContext('2d');var w=c.width,h=c.height;ctx.clearRect(0,0,w,h);ctx.strokeStyle='#00ff9c';ctx.lineWidth=1.5;ctx.beginPath();var arr=data||[];if(arr.length<2){ctx.stroke();return;}var mx=Math.max.apply(null,arr.concat([1]));for(var i=0;i<arr.length;i++){var x=w-i/(arr.length-1)*w;var y=h-(arr[i]/mx)*h;if(i==0)ctx.moveTo(x,y);else ctx.lineTo(x,y);}ctx.stroke(); }
+
+function renderCost(d){ if(!d)return; var bal=d.balance||{}; var kb=$('kpi-balance'); var note=$('cost-note'); if(bal.availableAmount!=null){kb.textContent=bal.availableAmount;$('kpi-cur').textContent=bal.currency||'CNY';kb.className='v'+(d.lowBalance?' low':'');note.textContent=d.lowBalance?'⚠ 余额低于 5 元，注意充值！':'余额正常';note.className='note'+(d.lowBalance?' err':'');} else {kb.textContent='获取失败';$('kpi-cur').textContent='';note.textContent=bal.msg?('获取失败：'+bal.msg):'—';note.className='note err';} }
+function renderMonitor(d){ if(!d||!d.metrics)return; var m=d.metrics; setBar('b-cpu','v-cpu',m.cpu,m.cpu!=null?m.cpu.toFixed(1)+'%':''); setBar('b-mem','v-mem',m.mem,m.mem!=null?m.mem.toFixed(1)+'%':''); setBar('b-neto','v-neto',m.netOut!=null?Math.min(100,m.netOut/20000000*100):0,fmtBps(m.netOut)); setBar('b-neti','v-neti',m.netIn!=null?Math.min(100,m.netIn/20000000*100):0,fmtBps(m.netIn)); var s=(d.series&&d.series.cpu)||[]; $('v-cpu-h').textContent=s.length?('峰值 '+(Math.max.apply(null,s)||0).toFixed(1)+'%'):''; drawSpark('spark-cpu',s); }
+function renderMc(d){ if(!d)return; $('mc-online').textContent=(d.online!=null?(d.online+(d.max!=null?' / '+d.max:'')):'—'); $('mc-ver').textContent=[d.version,(d.motd?String(d.motd).slice(0,28):'')].filter(Boolean).join(' · '); var box=$('mc-players');box.innerHTML='';var pl=d.players||[]; if(pl.length===0){var e=document.createElement('span');e.className='chip';e.textContent=d.reason||'无玩家数据';box.appendChild(e);} else{ for(var i=0;i<pl.length;i++){var c=document.createElement('span');c.className='chip';c.textContent=(pl[i].name||pl[i].id||'?');box.appendChild(c);} } }
+var USE_RELAY=false;
+function doNotify(){ if(!ADMIN)return;
+  if(USE_RELAY){ api('relay',{op:'notify-test'}).then(function(d){ log('推送（走函数）：'+(d.msg||''),d.ok?'ok':'warn'); }).catch(function(e){log('推送(函数)失败：'+e.message,'err');}); }
+  else { api('notify-test').then(function(d){ log('推送测试：'+(d.msg||''),d.ok?'ok':'warn'); }).catch(function(e){log('推送测试失败：'+e.message,'err');}); }
+}
+
+/* 办法二：连接模式 + 中继（启用/停用/状态） */
+function setMode(m){ USE_RELAY=(m==='function');
+  var a=$('btn-mode-direct'),b=$('btn-mode-function'); if(a)a.className='mini-btn'+(m==='direct'?' blue':''); if(b)b.className='mini-btn'+(m==='function'?' blue':'');
+  log('连接模式 → '+(USE_RELAY?'走函数（CF/飞书 委托给阿里云 FC，学校外网不稳也能推）':'直连（本机直接连）'),'info');
+}
+function relayToggle(on){ if(!ADMIN)return; api('relay-toggle',{enabled:on?'1':'0'}).then(function(d){ log('中继：'+(d.msg||''),d.ok?'ok':'warn'); relayLoadStatus(); }).catch(function(e){log('中继切换失败：'+e.message,'err');}); }
+function relayLoadStatus(){ api('relay-status').then(function(d){ var s=$('relay-state'); if(s) s.textContent='中继：'+(d.enabled?'已启用':'已停用')+(d.relayUrl?' / RELAY_URL 已配':' / 未配 RELAY_URL'); }).catch(function(){}); }
+
+function doMc(){ api('mc').then(renderMc).catch(function(e){log('MC 探测失败：'+e.message,'err');}); }
+
+function doProbe(){ if(!ADMIN)return; api('probe').then(function(d){ if(d.ok){
+  if(d.serviceAlive===true)log('探活 OK：'+d.publicIp+':'+d.port+'（MC）可达','ok');
+  else {log('探活：'+(d.alert||d.reason||'MC 不可达'),d.alert?'err':'warn'); if(d.alert)log('告警：'+d.alert,'err');}
+  var mm=$('mcs-meta'); if(mm){ if(d.mcsAlive===true)mm.innerHTML='MCS manager '+d.mcsPort+'：<b style="color:var(--green)">可达</b>'; else if(d.mcsAlive===false){mm.innerHTML='MCS manager '+d.mcsPort+'：<b style="color:var(--red)">不可达</b>（'+(d.mcsReason||'refused')+'）'; log('MCS manager '+d.mcsPort+' 不可达：'+(d.mcsReason||''),'warn');} }
+ } else log('探活：'+d.msg,'warn'); }).catch(function(e){log('探活失败：'+e.message,'err');}); }
+function doAudit(){ if(!ADMIN)return; api('audit').then(function(d){ if(d.ok){ var lines=[]; if(d.suspicious)lines.push('⚠ SSH 爆破嫌疑：'+(d.topOffenders[0]&&d.topOffenders[0].ip)+' 失败 '+(d.topOffenders[0]&&d.topOffenders[0].count)+' 次'); if(d.untrustedLogins&&d.untrustedLogins.length)lines.push('非白名单 IP 登录：'+d.untrustedLogins.map(function(a){return a.ip;}).join(', ')); if(!lines.length)lines.push('正常：最近失败 '+d.failedCount+' 次，最近登录 '+(d.logins?d.logins.length:0)+' 条'); (d.active&&d.active.length?d.active:[]).forEach(function(a){log('活动会话：'+a,'info');}); lines.forEach(function(l){log(l,(d.suspicious||(d.untrustedLogins&&d.untrustedLogins.length))?'err':'ok');}); } else log('审计：'+d.msg,'warn'); }).catch(function(e){log('审计失败：'+e.message,'err');}); }
+
+/* 命令：OS(root) / MC 指令 两模式 */
+function setCmdMode(m){ cmdMode=m; var inp=$('cmd-input'); if(inp)inp.list=(m==='mc')?'mc-cmds':''; var os=$('cmd-mode-os'),mc=$('cmd-mode-mc'); if(os)os.className='mini-btn'+(m==='os'?' blue':''); if(mc)mc.className='mini-btn'+(m==='mc'?' blue':''); if(inp)inp.placeholder=(m==='mc')?'/whitelist /say /kick /op …':'uptime / docker ps / tail …'; }
+function doExec(){ if(!ADMIN)return; var c=$('cmd-input').value.trim(); if(!c){log('命令为空','warn');return;}
+  if(cmdMode==='os'){ log('执行 OS 命令：'+c,'info'); api('exec',{cmd:c,timeout:'60'}).then(function(d){ out('cmd-out',d.output?('exit '+(d.exitCode!=null?d.exitCode:'?')+'\n'+d.output):JSON.stringify(d,null,1)); log(d.ok?('OS 命令完成（'+d.status+'）'):('OS 命令：'+d.msg),d.ok?'ok':'err'); }).catch(function(e){out('cmd-out','错误：'+e.message);log('OS 命令失败：'+e.message,'err');}); }
+  else { log('发送 MC 指令：'+c,'info'); api('mccmd',{cmd:c}).then(function(d){ out('cmd-out',d.ok?((d.command||c)+'\n'+(d.output||'(ok)')):(d.reason||d.msg||'MC 指令失败')); log('MC 指令：'+(d.ok?(d.command||c):(d.reason||d.msg)),d.ok?'ok':'err'); }).catch(function(e){out('cmd-out','错误：'+e.message);log('MC 指令失败：'+e.message,'err');}); }
+}
+
+/* 定时计划（管理员保存 → Cloudflare KV） */
+function loadSchedule(){ api('schedule').then(function(d){ var s=(d&&d.schedule)||null; var note=$('sched-note'); if(s){ $('sched-start').value=s.startAt||'08:00'; $('sched-stop').value=s.stopAt||'22:00'; $('sched-days').value=(s.days&&s.days.length)?s.days.join(','):''; $('sched-tz').value=s.tz||'Asia/Shanghai'; $('sched-enabled').checked=(s.enabled===true||s.enabled==='true'); note.textContent=(d.source==='kv'?'已从 Cloudflare KV 载入':(d.source==='env'?'来自环境变量':'未配置'))+(d.kvConfigured?'':'（KV 未配置）'); } else { note.textContent='未配置定时计划'+(d&&d.kvConfigured?'':'（KV 未配置，保存会失败）'); } }).catch(function(){}); }
+function saveSchedule(){ if(!ADMIN)return; var payload={ enabled:$('sched-enabled').checked?'true':'false', startAt:$('sched-start').value||'08:00', stopAt:$('sched-stop').value||'22:00', days:($('sched-days').value||'').trim().replace(/ /g,''), tz:($('sched-tz').value||'Asia/Shanghai').trim() }; api('schedule-set',payload).then(function(d){ log('定时计划：'+(d.msg||''),d.ok?'ok':'err'); loadSchedule(); }).catch(function(e){log('保存定时计划失败：'+e.message,'err');}); }
+function buildMcDatalist(){ var dl=$('mc-cmds'); if(!dl)return; MC_COMMANDS.forEach(function(c){ var o=document.createElement('option'); o.value=c; dl.appendChild(o); }); }
+
+/* ===== 事件绑定 ===== */
+window.addEventListener('DOMContentLoaded',function(){
+  buildMcDatalist();
+  $('btn-connect').addEventListener('click',function(){doConnect(false);});
+  $('login-pass').addEventListener('keydown',function(e){if(e.key==='Enter')doConnect(false);});
+  $('btn-readonly').addEventListener('click',enterReadonly);
+  $('btn-upgrade').addEventListener('click',upgradeToAdmin);
+  $('btn-start').addEventListener('click',doStart);
+  $('btn-stop').addEventListener('click',doStop);
+  $('btn-restart').addEventListener('click',doRestart);
+  $('btn-refresh').addEventListener('click',doRefresh);
+  $('btn-mc').addEventListener('click',doMc);
+  $('btn-probe').addEventListener('click',doProbe);
+  $('btn-audit').addEventListener('click',doAudit);
+  $('btn-notify').addEventListener('click',doNotify);
+  $('btn-exec').addEventListener('click',doExec);
+  $('cmd-input').addEventListener('keydown',function(e){if(e.key==='Enter')doExec();});
+  $('cmd-mode-os').addEventListener('click',function(){setCmdMode('os');});
+  $('cmd-mode-mc').addEventListener('click',function(){setCmdMode('mc');});
+  $('btn-sched-save').addEventListener('click',saveSchedule);
+  $('btn-mode-direct').addEventListener('click',function(){setMode('direct');});
+  $('btn-mode-function').addEventListener('click',function(){setMode('function');});
+  $('btn-relay-on').addEventListener('click',function(){relayToggle(true);});
+  $('btn-relay-off').addEventListener('click',function(){relayToggle(false);});
+
+  var stored=null;try{stored=sessionStorage.getItem('ecspw');}catch(e){}
+  if(stored){ $('login-pass').value=stored; log('检测到已保存的管理员会话，自动连接中…','info'); doConnect(true); }
+  else { $('login-pass').focus(); }
+});
+})();
+</script>
+</body>
+</html>

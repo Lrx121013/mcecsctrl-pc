@@ -1,0 +1,35 @@
+# 上传本目录到 GitHub 后：Actions 会在这个 Windows 虚拟机上自动编译出 .exe，
+# 到 "Actions" 页面点一下对应 run → Artifacts 下载 *.exe 即可。
+name: Build Desktop (Windows exe)
+
+on:
+  workflow_dispatch:          # 手动：右上角 Actions → 选本工作流 → Run workflow
+  push:
+    branches: [ main, master ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest   # 用 Windows 虚拟机 → 能正确编译出 Windows .exe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 装 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: 安装依赖
+        run: npm install
+
+      - name: 编译 Windows 单文件 exe
+        run: npx electron-builder --win portable
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecs-console-desktop-win
+          path: |
+            dist/*.exe
+            !dist/*unpacked*/
+          retention-days: 30

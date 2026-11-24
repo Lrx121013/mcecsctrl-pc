@@ -1,0 +1,38 @@
+{
+  "name": "ecs-console-desktop",
+  "version": "1.0.0",
+  "description": "ECS 控制台 · 桌面版（直连 阿里云/CF/飞书 + 函数中继；办法一 + 办法二）",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node server.js",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "dependencies": {
+    "@alicloud/ecs20140526": "^7.11.10",
+    "@alicloud/openapi-client": "^0.4.15",
+    "@alicloud/openapi-core": "^1.0.9",
+    "@darabonba/typescript": "^1.0.6"
+  },
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "io.qzz.ecs-console",
+    "productName": "ECS Console",
+    "files": [
+      "main.js",
+      "server.js",
+      "router.js",
+      "modules/**",
+      "public/**",
+      "package.json"
+    ],
+    "win": { "target": "portable" },
+    "mac": { "target": "dmg" },
+    "linux": { "target": "AppImage" }
+  }
+}
