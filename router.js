@@ -16,9 +16,10 @@ const mMc = require('./modules/mc');
 const mMccmd = require('./modules/mccmd');
 const mSchedule = require('./modules/schedule');
 const mRelay = require('./modules/relay');
+const mFc = require('./modules/fc');
 
-const READONLY = ['status', 'monitor', 'mc', 'cost', 'schedule', 'relay-status'];
-const ADMIN = ['start', 'stop', 'restart', 'dns', 'exec', 'mccmd', 'probe', 'audit', 'schedule-set', 'notify-test', 'relay', 'relay-toggle'];
+const READONLY = ['status', 'monitor', 'mc', 'cost', 'schedule', 'relay-status', 'fc-status'];
+const ADMIN = ['start', 'stop', 'restart', 'dns', 'exec', 'mccmd', 'probe', 'audit', 'schedule-set', 'notify-test', 'relay', 'relay-toggle', 'fc-enable', 'fc-disable'];
 const SYSTEM = ['scheduler'];
 const API_ACTIONS = [].concat(READONLY, ADMIN, SYSTEM, ['check', 'ping']);
 
@@ -46,6 +47,11 @@ const HANDLERS = {
   'relay-status': mRelay.relayStatus,
   'relay-toggle': (q) => mRelay.relayToggle(q.enabled === '1' || q.enabled === 'true'),
   relay: (q) => mRelay.relay(String(q.op || ''), q),
+
+  // FC 函数启停（启用/禁用中继函数本身）
+  'fc-status': mFc.status,
+  'fc-enable': mFc.enable,
+  'fc-disable': (q) => mFc.disable(q),
 };
 
 function json(obj, status) {

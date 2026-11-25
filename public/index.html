@@ -304,6 +304,21 @@ footer{padding:6px 14px;font-size:10px;color:var(--gray);border-top:1px solid rg
           <div class="note">直连：软件直接连 阿里云/Cloudflare/飞书/RCON。走函数：CF、飞书 等交给阿里云 FC（填 config.json 的 RELAY_URL + RELAY_SECRET，MODE=function），学校外网不稳也能推。启用/停用 = 云端开关。</div>
         </div>
       </div>
+
+      <div class="dash-row">
+        <div class="panel" style="flex:1;">
+          <div class="label">FC 函数开关 // 启用 · 禁用</div>
+          <div class="mini-btns" style="margin-bottom:6px;">
+            <span class="meta" id="fc-state">函数状态：—</span>
+            <button class="mini-btn gray" id="btn-fc-refresh">刷新</button>
+          </div>
+          <div class="mini-btns" style="margin-bottom:6px;">
+            <button class="mini-btn green" id="btn-fc-enable">启用函数</button>
+            <button class="mini-btn red" id="btn-fc-disable">禁用函数</button>
+          </div>
+          <div class="note">直接控制阿里云函数计算的 <b>MCECSBot</b> 函数是否允许被调用。函数因欠费/手动被禁用（触发器报 InvokeDisabled）时，点「启用函数」即可恢复，无需登录阿里云控制台。<b>禁用后 PWA 中继与走函数模式将不可用</b>；请谨慎操作。</div>
+        </div>
+      </div>
     </main>
 
     <div class="terminal" style="margin:0 14px 14px;">
@@ -425,12 +440,13 @@ function enterConsole(isAdmin){
   fetchAll();
   loadSchedule();
   relayLoadStatus();
+  fcLoadStatus();
 }
 function applyAdminMode(){
   var t=$('tier-tag'); t.textContent=ADMIN?'ADMIN':'READ-ONLY'; t.style.color=ADMIN?'var(--green)':'var(--yellow)';
   var ft=$('footer-tier'); if(ft)ft.textContent=ADMIN?'ADMIN':'READ-ONLY';
   $('btn-upgrade').style.display=ADMIN?'none':'inline-block';
-  ['btn-start','btn-stop','btn-restart','btn-exec','btn-probe','btn-audit','btn-notify','btn-sched-save','btn-relay-on','btn-relay-off','cmd-mode-os','cmd-mode-mc','cmd-input','sched-start','sched-stop','sched-days','sched-tz','sched-enabled'].forEach(function(id){var e=$(id);if(e)e.disabled=!ADMIN;});
+  ['btn-start','btn-stop','btn-restart','btn-exec','btn-probe','btn-audit','btn-notify','btn-sched-save','btn-relay-on','btn-relay-off','btn-fc-enable','btn-fc-disable','cmd-mode-os','cmd-mode-mc','cmd-input','sched-start','sched-stop','sched-days','sched-tz','sched-enabled'].forEach(function(id){var e=$(id);if(e)e.disabled=!ADMIN;});
   setCmdMode(cmdMode);
 }
 
@@ -510,6 +526,26 @@ function setMode(m){ USE_RELAY=(m==='function');
 function relayToggle(on){ if(!ADMIN)return; api('relay-toggle',{enabled:on?'1':'0'}).then(function(d){ log('中继：'+(d.msg||''),d.ok?'ok':'warn'); relayLoadStatus(); }).catch(function(e){log('中继切换失败：'+e.message,'err');}); }
 function relayLoadStatus(){ api('relay-status').then(function(d){ var s=$('relay-state'); if(s) s.textContent='中继：'+(d.enabled?'已启用':'已停用')+(d.relayUrl?' / RELAY_URL 已配':' / 未配 RELAY_URL'); }).catch(function(){}); }
 
+/* FC 函数启停（启用 / 禁用 MCECSBot） */
+function fcLoadStatus(){
+  api('fc-status').then(function(d){
+    var s=$('fc-state'); if(!s)return;
+    if(d&&d.ok){
+      s.innerHTML='函数状态：<b style="color:'+(d.disabled?'var(--red)':'var(--green)')+'">'+(d.disabled?'已禁用':'正常')+'</b> / '+(d.functionName||'MCECSBot')+(d.region?' ('+d.region+')':'');
+    } else {
+      s.textContent='函数状态：获取失败'+(d&&d.msg?'（'+d.msg+'）':'');
+    }
+  }).catch(function(e){ var s=$('fc-state'); if(s)s.textContent='函数状态：错误（'+e.message+'）'; });
+}
+function fcToggle(on){
+  if(!ADMIN)return;
+  if(!on && !window.confirm('确定要禁用 FC 函数吗？禁用后 PWA 中继与「走函数」模式将无法使用。')) return;
+  api(on?'fc-enable':'fc-disable').then(function(d){
+    log((on?'启用':'禁用')+'函数：'+(d.msg||''),d.ok?'ok':'err');
+    fcLoadStatus();
+  }).catch(function(e){ log('函数'+(on?'启用':'禁用')+'失败：'+e.message,'err'); });
+}
+
 function doMc(){ api('mc').then(renderMc).catch(function(e){log('MC 探测失败：'+e.message,'err');}); }
 
 function doProbe(){ if(!ADMIN)return; api('probe').then(function(d){ if(d.ok){
@@ -555,6 +591,9 @@ window.addEventListener('DOMContentLoaded',function(){
   $('btn-mode-function').addEventListener('click',function(){setMode('function');});
   $('btn-relay-on').addEventListener('click',function(){relayToggle(true);});
   $('btn-relay-off').addEventListener('click',function(){relayToggle(false);});
+  $('btn-fc-refresh').addEventListener('click',fcLoadStatus);
+  $('btn-fc-enable').addEventListener('click',function(){fcToggle(true);});
+  $('btn-fc-disable').addEventListener('click',function(){fcToggle(false);});
 
   var stored=null;try{stored=sessionStorage.getItem('ecspw');}catch(e){}
   if(stored){ $('login-pass').value=stored; log('检测到已保存的管理员会话，自动连接中…','info'); doConnect(true); }

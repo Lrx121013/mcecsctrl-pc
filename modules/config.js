@@ -39,6 +39,10 @@ const ENV = {
   MODE: process.env.MODE || 'direct',      // 'direct'=直连 / 'function'=走中继函数
   RELAY_URL: process.env.RELAY_URL || '',       // 函数中继：阿里云 FC 的 HTTP 触发器地址
   RELAY_SECRET: process.env.RELAY_SECRET || '',  // 函数中继：调用该函数时带的密钥（防他人）
+  // FC 函数启停（控制台「启用/禁用函数」开关）：默认值即本项目的中继函数 MCECSBot
+  FC_ACCOUNT_ID: process.env.FC_ACCOUNT_ID || '1804172004140061', // 阿里云账号 ID（FC endpoint 前缀）
+  FC_REGION: process.env.FC_REGION || 'cn-hongkong',               // FC 函数所在地域
+  FC_FUNCTION_NAME: process.env.FC_FUNCTION_NAME || 'MCECSBot',    // 要控制的 FC 函数名
 
   // 定时开关机：计划统一存 Cloudflare KV（CF_KV_NAMESPACE 填命名空间名字 MCECSConsole 即可，也接受 ID）
   CF_ACCOUNT_ID: process.env.CF_ACCOUNT_ID || '',

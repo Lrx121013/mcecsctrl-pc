@@ -24,5 +24,8 @@
   "MODE": "direct",
   "RELAY_URL": "",
   "RELAY_SECRET": "",
-  "_说明": "复制本文件为 config.json 并填值；端口类填默认值；CMD_ALLOWLIST 留空=用内置只读白名单。办法二：RELAY_URL 填阿里云 FC 触发器地址 + RELAY_SECRET，MODE=function。"
+  "FC_ACCOUNT_ID": "1804172004140061",
+  "FC_REGION": "cn-hongkong",
+  "FC_FUNCTION_NAME": "MCECSBot",
+  "_说明": "复制本文件为 config.json 并填值；端口类填默认值；CMD_ALLOWLIST 留空=用内置只读白名单。办法二：RELAY_URL 填阿里云 FC 触发器地址 + RELAY_SECRET，MODE=function。FC_ACCOUNT_ID/FC_REGION/FC_FUNCTION_NAME 用于控制台的「启用/禁用函数」开关，已预填本项目默认值，一般不用改。"
 }
